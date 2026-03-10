@@ -269,11 +269,11 @@
   - DEFAULT_MARGIN: decimal (0.4 = 40%)
   - FINISH_RATE: SEK/h för efterarbete
   ===================================================================== */
-const FILAMENT_PRICES = { PLA: 200, PETG: 220, ABS: 180, TPU: 350, Custom: 200 };
+const FILAMENT_PRICES = { PLA: 200, PETG: 220, ABS: 180, TPU: 300, Custom: 200 };
 const EL_PRICE = 1.50; // SEK/kWh
 const PRINTER_PROFILE = { name: 'Anycubic Kobra S1 Combo', power: 250, drift: 2.46, price: 7000, lifetime: 10000 };
 const DEFAULT_MARGIN = 0.40;
-const FINISH_RATE = 200;
+const FINISH_RATE = 50;
 /* =================================================================== */
 
 function fmt(v){ return (Math.round(v*100)/100).toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' kr'; }
