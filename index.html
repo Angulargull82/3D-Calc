@@ -1,234 +1,376 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="sv">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>3D-print Kalkylator — förenklad (konfig i koden)</title>
+<title>3D-print Kalkylator — snygg (utan moms & waste)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#f6f7fb;--card:#ffffff;--accent:#0b5ed7;--muted:#666;}
-  body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);margin:0;padding:24px;display:flex;align-items:flex-start;justify-content:center;min-height:100vh}
-  .card{width:100%;max-width:880px;background:var(--card);border-radius:12px;box-shadow:0 6px 24px rgba(12,20,40,.08);padding:20px}
-  h1{margin:0 0 12px;font-size:20px}
-  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
-  select,input[type=number]{width:100%;padding:8px 10px;border:1px solid #e6e9ef;border-radius:8px;font-size:15px}
+  :root{
+    --bg:#f4f7fb;
+    --card:#ffffff;
+    --muted:#6b7280;
+    --accent:#0b5ed7;
+    --glass: rgba(255,255,255,0.6);
+    --success:#16a34a;
+    --danger:#ef4444;
+    --shadow: 0 8px 30px rgba(12,20,40,0.08);
+    --radius:14px;
+  }
+  [data-theme="dark"]{
+    --bg:#0b1220;
+    --card:#071126;
+    --muted:#94a3b8;
+    --accent:#6ea8ff;
+    --glass: rgba(255,255,255,0.04);
+    --success:#34d399;
+    --danger:#fb7185;
+    --shadow: 0 12px 40px rgba(2,6,23,0.7);
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family:Inter,system-ui,-apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background:
+      radial-gradient(1200px 600px at -10% 10%, rgba(11,94,215,0.06), transparent 8%),
+      radial-gradient(900px 500px at 110% 90%, rgba(102,126,234,0.04), transparent 10%),
+      var(--bg);
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    padding:36px;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    gap:20px;
+  }
+
+  .wrap{width:100%;max-width:1100px}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{
+    width:46px;height:46px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#6ea8ff);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;box-shadow:var(--shadow)
+  }
+  h1{font-size:18px;margin:0}
+  p.lead{margin:0;color:var(--muted);font-size:13px}
+
+  main.grid{
+    display:grid;
+    grid-template-columns: 1fr 380px;
+    gap:20px;
+    align-items:start;
+  }
+  @media(max-width:980px){ main.grid{grid-template-columns:1fr} }
+
+  .card{
+    background: linear-gradient(180deg, var(--card), color-mix(in srgb, var(--card) 95%, transparent));
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:18px;
+    overflow:hidden;
+  }
+
+  .controls{
+    display:flex;flex-direction:column;gap:12px;
+  }
+
+  .group{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  label{font-size:13px;color:var(--muted)}
+  select,input[type=number]{padding:10px;border-radius:10px;border:1px solid rgba(11,20,40,0.06);background:var(--glass);font-size:15px;color:inherit}
+  select:focus,input:focus{outline:2px solid color-mix(in srgb,var(--accent) 20%, transparent);}
+
   .full{grid-column:1/-1}
-  .actions{display:flex;gap:10px;margin-top:14px}
-  button{background:var(--accent);color:#fff;padding:10px 14px;border:0;border-radius:8px;cursor:pointer}
-  button.ghost{background:#eef3ff;color:var(--accent);border:1px solid #d9e6ff}
-  .results{margin-top:18px;padding:14px;border-radius:8px;background:#fbfdff;border:1px solid #eef4ff}
-  .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f4fb}
-  .row:last-child{border-bottom:0}
+  .actions{display:flex;gap:10px;align-items:center;margin-top:8px}
+  button.btn{background:var(--accent);color:white;padding:10px 14px;border-radius:10px;border:0;cursor:pointer;font-weight:600;box-shadow:0 6px 18px rgba(11,94,215,0.16)}
+  button.ghost{background:transparent;border:1px solid rgba(11,94,215,0.12);color:var(--accent);padding:9px 12px;border-radius:10px;cursor:pointer}
+  button.small{padding:6px 10px;font-size:14px}
+
+  /* Result column */
+  .result-panel{position:sticky;top:36px;height:fit-content}
+  .result-card{padding:18px;border-radius:12px;background:linear-gradient(180deg, color-mix(in srgb,var(--card) 96%, transparent), var(--card));box-shadow:var(--shadow)}
+  .price-big{font-size:28px;font-weight:700;color:var(--accent)}
   .muted{color:var(--muted);font-size:13px}
-  .small{font-size:12px;color:var(--muted)}
-  .info{margin-top:12px;padding:12px;border-radius:8px;background:#fcfeff;border:1px solid #e6f0ff;font-size:13px}
-  .hidden{display:none}
-  @media(max-width:700px){.grid{grid-template-columns:1fr}}
+  .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(11,20,40,0.04)}
+  .row:last-child{border-bottom:0}
+  .label{font-size:13px;color:var(--muted)}
+  .value{font-weight:600}
+
+  .chip{display:inline-flex;gap:8px;align-items:center;padding:6px 8px;border-radius:999px;background:rgba(11,20,40,0.03);font-size:13px;color:var(--muted)}
+  .footer{font-size:13px;color:var(--muted);margin-top:10px}
+
+  /* big final price box */
+  .final{
+    margin-top:12px;padding:12px;border-radius:10px;background:linear-gradient(90deg, rgba(11,94,215,0.06), rgba(11,94,215,0.02));display:flex;align-items:center;justify-content:space-between;gap:12px;
+  }
+  .final .price{font-size:22px;font-weight:800;color:var(--accent)}
+  .final small{display:block;color:var(--muted);font-weight:600}
+
+  /* info box */
+  .info{margin-bottom:12px;padding:12px;border-radius:10px;background:linear-gradient(180deg,var(--glass),transparent);border:1px solid rgba(11,94,215,0.06);font-size:13px;color:var(--muted)}
+
+  /* dark toggle */
+  .tog{display:flex;gap:8px;align-items:center}
+  .switch{width:46px;height:26px;background:rgba(11,20,40,0.06);border-radius:999px;position:relative;cursor:pointer}
+  .knob{width:20px;height:20px;background:white;border-radius:50%;position:absolute;top:3px;left:3px;transition:all .22s cubic-bezier(.2,.9,.3,1);box-shadow:0 6px 18px rgba(2,6,23,0.15)}
+  [data-theme="dark"] .knob{left:23px;background:linear-gradient(135deg,#6ea8ff,#0b5ed7)}
+
+  @media(max-width:520px){
+    .group{grid-template-columns:1fr}
+    .result-panel{position:static}
+  }
 </style>
 </head>
 <body>
-  <main class="card" role="main">
-    <h1>3D-print Pris-kalkylator — förenklad</h1>
-
-    <div id="configInfo" class="info" aria-live="polite">
-      <!-- Fylls av JavaScript med info om maskin/el/fail som är konfigurerat i koden -->
-    </div>
-
-    <div class="grid">
-      <div>
-        <label>Material (snabbval)</label>
-        <select id="materialSelect">
-          <option value="PLA">PLA</option>
-          <option value="PETG">PETG</option>
-          <option value="ABS">ABS</option>
-          <option value="TPU">TPU</option>
-          <option value="Custom">Eget (ändra i koden)</option>
-        </select>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo">3D</div>
+        <div>
+          <h1>3D-print Pris-kalkylator</h1>
+          <p class="lead">Enkel prisöversikt — välj alternativ, få pris.</p>
+        </div>
       </div>
 
-      <div>
-        <label>Vikt (vanliga val)</label>
-        <select id="weightSelect">
-          <option value="10">~10 g</option>
-          <option value="25">~25 g</option>
-          <option value="50" selected>~50 g</option>
-          <option value="100">~100 g</option>
-          <option value="250">~250 g</option>
-          <option value="custom">Ange exakt</option>
-        </select>
-        <input id="weightCustom" class="hidden" type="number" min="0.1" step="0.1" placeholder="Vikt i gram (ex 47.5)">
+      <div class="tog">
+        <div class="chip" id="machineInfo">Loading…</div>
+        <div style="width:12px"></div>
+        <div title="Mörkt tema" style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:13px;color:var(--muted)">Tema</div>
+          <div class="switch" id="darkSwitch" role="button" aria-pressed="false" tabindex="0">
+            <div class="knob" aria-hidden="true"></div>
+          </div>
+        </div>
       </div>
+    </header>
 
-      <div>
-        <label>Printtid (vanliga val)</label>
-        <select id="timeSelect">
-          <option value="0.5">~0.5 h</option>
-          <option value="1">~1 h</option>
-          <option value="2">~2 h</option>
-          <option value="3" selected>~3 h</option>
-          <option value="5">~5 h</option>
-          <option value="custom">Ange exakt</option>
-        </select>
-        <input id="timeCustom" class="hidden" type="number" min="0.01" step="0.01" placeholder="Tid i timmar (ex 2.25)">
-      </div>
+    <main class="grid">
+      <!-- CONTROLS -->
+      <section class="card controls" aria-labelledby="controlsTitle">
+        <div class="info" id="configInfo">Hämtar konfiguration…</div>
 
-      <div>
-        <label>Kvalitet (påverkar printtid)</label>
-        <select id="qualitySelect">
-          <option value="draft">Draft — snabb</option>
-          <option value="standard" selected>Standard — balans</option>
-          <option value="strong">Strong — extra solid</option>
-        </select>
-      </div>
+        <div class="group">
+          <div class="field">
+            <label for="materialSelect">Material</label>
+            <select id="materialSelect" aria-label="Material">
+              <option value="PLA">PLA</option>
+              <option value="PETG">PETG</option>
+              <option value="ABS">ABS</option>
+              <option value="TPU">TPU</option>
+              <option value="Custom">Eget (ändra i koden)</option>
+            </select>
+          </div>
 
-      <div>
-        <label>Finish / efterarbete</label>
-        <select id="finishSelect">
-          <option value="none" selected>Inget</option>
-          <option value="light">Lätt slipning/supportborttag — ~10 min</option>
-          <option value="sand">Noggrann slipning/support — ~20 min</option>
-          <option value="paint">Målning/finish — ~60 min</option>
-        </select>
-      </div>
+          <div class="field">
+            <label for="weightSelect">Vikt (gram)</label>
+            <select id="weightSelect" aria-label="Vikt">
+              <option value="10">~10 g</option>
+              <option value="25">~25 g</option>
+              <option value="50" selected>~50 g</option>
+              <option value="100">~100 g</option>
+              <option value="250">~250 g</option>
+              <option value="custom">Ange exakt</option>
+            </select>
+            <input id="weightCustom" class="hidden" type="number" min="0.1" step="0.1" placeholder="Vikt i gram">
+          </div>
 
-      <div class="full">
-        <label class="muted">Observera: Fails, elpris och maskinparametrar är **inte** ändringsbara i UI. De ändrar du direkt i koden (se kommentaren "ÄNDRA HÄR").</label>
-      </div>
-    </div>
+          <div class="field">
+            <label for="timeSelect">Printtid</label>
+            <select id="timeSelect" aria-label="Printtid">
+              <option value="0.5">~0.5 h</option>
+              <option value="1">~1 h</option>
+              <option value="2">~2 h</option>
+              <option value="3" selected>~3 h</option>
+              <option value="5">~5 h</option>
+              <option value="custom">Ange exakt</option>
+            </select>
+            <input id="timeCustom" class="hidden" type="number" min="0.01" step="0.01" placeholder="Tid i timmar">
+          </div>
 
-    <div class="actions">
-      <button id="calcBtn">Beräkna pris</button>
-      <button id="resetBtn" class="ghost" type="button">Återställ</button>
-      <button id="copyBtn" class="ghost" type="button">Kopiera resultat</button>
-    </div>
+          <div class="field">
+            <label for="qualitySelect">Kvalitet</label>
+            <select id="qualitySelect" aria-label="Kvalitet">
+              <option value="draft">Draft — snabb</option>
+              <option value="standard" selected>Standard — balans</option>
+              <option value="strong">Strong — extra solid</option>
+            </select>
+          </div>
 
-    <section class="results" id="results" aria-live="polite">
-      <div class="row"><div class="muted">Materialkostnad</div><div id="materialCost">—</div></div>
-      <div class="row"><div class="muted">Energikostnad</div><div id="energyCost">—</div></div>
-      <div class="row"><div class="muted">Maskinkostnad (drift)</div><div id="machineCost">—</div></div>
-      <div class="row"><div class="muted">Efterarbete (per del)</div><div id="finishCost">—</div></div>
-      <div class="row"><div class="muted">Misslyckandekost (waste)</div><div id="failCost">—</div></div>
-      <div class="row"><strong>Summa (utan vinst)</strong><strong id="sumNoProfit">—</strong></div>
-      <div class="row"><div class="muted">Efter vinstmarginal</div><div id="afterProfit">—</div></div>
-      <div class="row"><div class="muted">Slutpris (inkl. moms)</div><div id="finalPrice">—</div></div>
-    </section>
-  </main>
+          <div class="field">
+            <label for="finishSelect">Finish / efterarbete</label>
+            <select id="finishSelect" aria-label="Finish">
+              <option value="none" selected>Inget</option>
+              <option value="light">Lätt slipning — ~10 min</option>
+              <option value="sand">Noggrann slipning — ~20 min</option>
+              <option value="paint">Målning — ~60 min</option>
+            </select>
+          </div>
+
+          <div class="field full">
+            <label class="muted">Fail/waste hanteras av ägaren — inte synligt för kund</label>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="calcBtn" class="btn">Beräkna pris</button>
+          <button id="resetBtn" class="ghost small">Återställ</button>
+          <button id="copyBtn" class="ghost small">Kopiera resultat</button>
+        </div>
+
+        <div class="footer muted">Ändra prismoduler och antaganden i koden (sök efter <strong>ÄNDRA HÄR</strong>).</div>
+      </section>
+
+      <!-- RESULTS -->
+      <aside class="result-panel">
+        <div class="result-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div>
+              <div class="muted">Slutpris (efter vinst)</div>
+              <div class="price-big" id="finalPrice">– kr</div>
+            </div>
+            <div style="text-align:right">
+              <div class="chip" id="materialChip">—</div>
+              <div style="height:8px"></div>
+              <div class="muted" style="font-size:12px">Uppdatera för fulla siffror</div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px">
+            <div class="row"><div class="label">Materialkostnad</div><div class="value" id="materialCost">—</div></div>
+            <div class="row"><div class="label">Energikostnad</div><div class="value" id="energyCost">—</div></div>
+            <div class="row"><div class="label">Maskinkostnad (drift)</div><div class="value" id="machineCost">—</div></div>
+            <div class="row"><div class="label">Efterarbete</div><div class="value" id="finishCost">—</div></div>
+            <div class="row"><div class="label"><strong>Summa (utan vinst)</strong></div><div class="value" id="sumNoProfit">—</div></div>
+          </div>
+
+          <div class="final" aria-hidden="false">
+            <div>
+              <div style="font-size:13px;color:var(--muted)">Efter vinst (standard)</div>
+              <div class="price" id="afterProfit">—</div>
+            </div>
+            <div style="text-align:right">
+              <div style="height:4px"></div>
+              <div style="font-size:12px;color:var(--muted)">Klicka Kopiera för offerttext</div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px" class="muted small" id="notes">Noteringar: —</div>
+        </div>
+      </aside>
+    </main>
+  </div>
 
 <script>
-/* 
-  ======= ÄNDRA HÄR (endast i koden) =======
-  - FILAMENT_PRICES: pris i SEK per kg för varje material.
-  - EL_PRICE: SEK/kWh (energikostnaden).
-  - PRINTER_PROFILE: objekt med name, power (W), drift (SEK/h), price (SEK), lifetime (h).
-  - FAIL_RATE: decimal (0.0 = du står för fails).
-  - DEFAULT_MARGIN: vinstmarginal som appliceras (0.4 = 40%).
-  - VAT: moms (0.25 = 25%).
-  - FINISH_RATE: SEK per timme för efterarbete (t.ex. 200).
-  Ändra dessa värden för att påverka alla beräkningar. Ingen annan UI-kod behöver ändras.
-*/
-const FILAMENT_PRICES = { PLA: 200, PETG: 220, ABS: 180, TPU: 300, Custom: 200 };
-const EL_PRICE = 1.50; // SEK per kWh
+/* ===================== ÄNDRA HÄR (endast i koden) =====================
+  - FILAMENT_PRICES: SEK per kg
+  - EL_PRICE: SEK per kWh
+  - PRINTER_PROFILE: { name, power (W), drift (SEK/h), price (SEK), lifetime (h) }
+  - DEFAULT_MARGIN: decimal (0.4 = 40%)
+  - FINISH_RATE: SEK/h för efterarbete
+  ===================================================================== */
+const FILAMENT_PRICES = { PLA: 200, PETG: 220, ABS: 180, TPU: 350, Custom: 200 };
+const EL_PRICE = 1.50; // SEK/kWh
 const PRINTER_PROFILE = { name: 'Anycubic Kobra S1 Combo', power: 250, drift: 2.46, price: 7000, lifetime: 10000 };
-const FAIL_RATE = 0.0; // 0 = du står för fails
-const DEFAULT_MARGIN = 0.40; // 40%
-const VAT = 0.25; // 25%
-const FINISH_RATE = 200; // SEK/h för finish
-/* ===================================================== */
+const DEFAULT_MARGIN = 0.40;
+const FINISH_RATE = 200;
+/* =================================================================== */
 
 function fmt(v){ return (Math.round(v*100)/100).toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' kr'; }
 
-// visa konfig-info (icke redigerbar för användaren)
-function renderConfigInfo(){
-  const el = document.getElementById('configInfo');
+function renderConfig(){
   const maintPerHour = PRINTER_PROFILE.price / PRINTER_PROFILE.lifetime;
-  el.innerHTML = `
-    <strong>Snabbinfo (konfigurerat i koden):</strong><br>
-    Maskin: ${PRINTER_PROFILE.name} — effekt ${PRINTER_PROFILE.power} W, driftkostnad ${PRINTER_PROFILE.drift} SEK/h.<br>
+  const cfg = document.getElementById('configInfo');
+  cfg.innerHTML = `<strong>Antaganden (konfigurerat i koden)</strong><br>
+    Maskin: ${PRINTER_PROFILE.name} — ${PRINTER_PROFILE.power} W, drift ${PRINTER_PROFILE.drift} SEK/h.<br>
     Underhåll/avskrivning: ca ${fmt(maintPerHour)}/h (baserat på pris ${PRINTER_PROFILE.price} SEK & livslängd ${PRINTER_PROFILE.lifetime} h).<br>
-    Elpris: ${EL_PRICE.toFixed(2)} SEK/kWh. Fail-rate: ${(FAIL_RATE*100).toFixed(0)}% (du står för fails om 0%).<br>
-    Vill du ändra siffror här — öppna filen och redigera blocket markerat "ÄNDRA HÄR".
-  `;
+    Elpris (använt): ${EL_PRICE.toFixed(2)} SEK/kWh.`;
+  document.getElementById('machineInfo').innerText = PRINTER_PROFILE.name;
 }
 
-// UI toggles för custom inputs
+// UI helpers
 const weightSelect = document.getElementById('weightSelect');
 const weightCustom = document.getElementById('weightCustom');
 const timeSelect = document.getElementById('timeSelect');
 const timeCustom = document.getElementById('timeCustom');
 
-weightSelect.addEventListener('change', ()=> {
-  weightCustom.classList.toggle('hidden', weightSelect.value !== 'custom');
-});
-timeSelect.addEventListener('change', ()=> {
-  timeCustom.classList.toggle('hidden', timeSelect.value !== 'custom');
-});
+weightSelect.addEventListener('change', ()=> weightCustom.classList.toggle('hidden', weightSelect.value !== 'custom'));
+timeSelect.addEventListener('change', ()=> timeCustom.classList.toggle('hidden', timeSelect.value !== 'custom'));
 
+// theme toggle
+const darkSwitch = document.getElementById('darkSwitch');
+function setTheme(dark){
+  if(dark){ document.documentElement.setAttribute('data-theme','dark'); darkSwitch.setAttribute('aria-pressed','true'); }
+  else { document.documentElement.removeAttribute('data-theme'); darkSwitch.setAttribute('aria-pressed','false'); }
+  const knob = darkSwitch.querySelector('.knob');
+  knob.style.transform = dark ? 'translateX(18px)' : 'translateX(0)';
+}
+darkSwitch.addEventListener('click', ()=> {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  setTheme(!isDark);
+});
+darkSwitch.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') darkSwitch.click(); });
+
+// calculations
 function calculate(){
-  // Vikt
   const weight = (weightSelect.value === 'custom') ? parseFloat(weightCustom.value)||0 : parseFloat(weightSelect.value);
-  // Tid
   const time = (timeSelect.value === 'custom') ? parseFloat(timeCustom.value)||0 : parseFloat(timeSelect.value);
-
-  // Kvalitet multiplikator
   const quality = document.getElementById('qualitySelect').value;
   const qualityMultiplier = quality === 'draft' ? 0.7 : (quality === 'standard' ? 1 : 1.5);
-
-  // Finish minuter
   const finish = document.getElementById('finishSelect').value;
   const finishMinutesMap = { none:0, light:10, sand:20, paint:60 };
   const finishMinutes = finishMinutesMap[finish] || 0;
-
-  // Materialpris från preset
   const materialKey = document.getElementById('materialSelect').value;
   const filamentPricePerKg = FILAMENT_PRICES[materialKey] ?? FILAMENT_PRICES.Custom;
 
-  // Beräkningar
   const materialCost = (weight/1000) * filamentPricePerKg;
-  const effectiveTime = Math.max(0.01, time * qualityMultiplier); // timmar
+  const effectiveTime = Math.max(0.01, time * qualityMultiplier);
   const energyCost = (PRINTER_PROFILE.power/1000) * effectiveTime * EL_PRICE;
   const machineCost = PRINTER_PROFILE.drift * effectiveTime;
   const maintPerHour = PRINTER_PROFILE.price / PRINTER_PROFILE.lifetime;
   const maintTotal = maintPerHour * effectiveTime;
   const finishCost = (finishMinutes/60) * FINISH_RATE;
-  const baseForFail = materialCost + energyCost;
-  const failCost = FAIL_RATE * baseForFail;
 
-  const sumNoProfit = materialCost + energyCost + machineCost + maintTotal + finishCost + failCost;
+  const sumNoProfit = materialCost + energyCost + machineCost + maintTotal + finishCost;
   const afterProfit = sumNoProfit * (1 + DEFAULT_MARGIN);
-  const finalPrice = afterProfit * (1 + VAT);
+  const finalPrice = afterProfit; // ingen moms applicerad
 
-  // Uppdatera UI
+  // update UI
   document.getElementById('materialCost').innerText = fmt(materialCost);
   document.getElementById('energyCost').innerText = fmt(energyCost);
   document.getElementById('machineCost').innerText = fmt(machineCost);
   document.getElementById('finishCost').innerText = fmt(finishCost);
-  document.getElementById('failCost').innerText = fmt(failCost);
   document.getElementById('sumNoProfit').innerText = fmt(sumNoProfit);
   document.getElementById('afterProfit').innerText = fmt(afterProfit);
   document.getElementById('finalPrice').innerText = fmt(finalPrice);
+  document.getElementById('materialChip').innerText = materialKey;
 
-  return { materialCost, energyCost, machineCost, maintTotal, finishCost, failCost, sumNoProfit, afterProfit, finalPrice };
+  const notes = [];
+  if(finish !== 'none') notes.push('Efterarbete ingår i priset');
+  document.getElementById('notes').innerText = notes.length ? notes.join(' · ') : 'Inga tilläggsnoteringar';
+
+  return { materialCost, energyCost, machineCost, maintTotal, finishCost, sumNoProfit, afterProfit, finalPrice };
 }
 
-// Buttons
+// buttons
 document.getElementById('calcBtn').addEventListener('click', calculate);
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   document.getElementById('materialSelect').value = 'PLA';
-  document.getElementById('weightSelect').value = '50'; weightCustom.classList.add('hidden'); weightCustom.value = '';
-  document.getElementById('timeSelect').value = '3'; timeCustom.classList.add('hidden'); timeCustom.value = '';
+  document.getElementById('weightSelect').value = '50'; weightCustom.classList.add('hidden'); weightCustom.value='';
+  document.getElementById('timeSelect').value = '3'; timeCustom.classList.add('hidden'); timeCustom.value='';
   document.getElementById('qualitySelect').value = 'standard';
   document.getElementById('finishSelect').value = 'none';
   calculate();
 });
 document.getElementById('copyBtn').addEventListener('click', ()=>{
   const r = calculate();
-  const text = `Pris: ${(Math.round(r.finalPrice*100)/100).toLocaleString('sv-SE')} SEK (inkl. moms)\nDetaljer:\nMaterial: ${r.materialCost.toFixed(2)} SEK\nEnergi: ${r.energyCost.toFixed(2)} SEK\nMaskin drift: ${r.machineCost.toFixed(2)} SEK\nEfterarbete: ${r.finishCost.toFixed(2)} SEK\nWaste: ${r.failCost.toFixed(2)} SEK\nSumma utan vinst: ${r.sumNoProfit.toFixed(2)} SEK\nEfter vinst: ${r.afterProfit.toFixed(2)} SEK`;
+  const text = `Pris: ${(Math.round(r.finalPrice*100)/100).toLocaleString('sv-SE')} SEK (efter vinst)\nDetaljer:\nMaterial: ${r.materialCost.toFixed(2)} SEK\nEnergi: ${r.energyCost.toFixed(2)} SEK\nMaskin drift: ${r.machineCost.toFixed(2)} SEK\nEfterarbete: ${r.finishCost.toFixed(2)} SEK\nSumma utan vinst: ${r.sumNoProfit.toFixed(2)} SEK\nEfter vinst: ${r.afterProfit.toFixed(2)} SEK`;
   navigator.clipboard?.writeText(text);
   alert('Resultat kopierat till urklipp.');
 });
 
 // init
-renderConfigInfo();
+renderConfig();
 calculate();
 </script>
 </body>
