@@ -57,7 +57,7 @@
 
   main.grid{
     display:grid;
-    grid-template-columns: 1fr 380px;
+    grid-template-columns: 1fr 420px;
     gap:20px;
     align-items:start;
   }
@@ -215,6 +215,28 @@
             </select>
           </div>
 
+          <div class="field">
+            <label for="modelSelect">Modellarbete</label>
+            <select id="modelSelect" aria-label="Modellarbete">
+              <option value="ready" selected>Färdig modell (ingen CAD)</option>
+              <option value="edit">Färdig — kräver CAD-ändring</option>
+              <option value="create">Skapa i CAD från grunden</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="quantityInput">Antal</label>
+            <input id="quantityInput" type="number" min="1" step="1" value="1">
+          </div>
+
+          <div class="field">
+            <label for="expressSelect">Prioritet</label>
+            <select id="expressSelect" aria-label="Express">
+              <option value="normal" selected>Normal</option>
+              <option value="express">Express (+30%)</option>
+            </select>
+          </div>
+
           <div class="field full">
             <label class="muted">Fail/waste hanteras av ägaren — inte synligt för kund</label>
           </div>
@@ -249,21 +271,24 @@
             <div class="row"><div class="label">Energikostnad</div><div class="value" id="energyCost">—</div></div>
             <div class="row"><div class="label">Maskinkostnad (drift)</div><div class="value" id="machineCost">—</div></div>
             <div class="row"><div class="label">Efterarbete</div><div class="value" id="finishCost">—</div></div>
+            <div class="row"><div class="label">Modellarbete</div><div class="value" id="modelCost">—</div></div>
+            <div class="row"><div class="label">Risk/felpåslag</div><div class="value" id="riskCost">—</div></div>
             <div class="row"><div class="label"><strong>Summa (utan vinst)</strong></div><div class="value" id="sumNoProfit">—</div></div>
           </div>
 
           <div class="final" aria-hidden="false">
             <div>
-              <div style="font-size:13px;color:var(--muted)">Efter vinst (standard)</div>
+              <div style="font-size:13px;color:var(--muted)">Efter vinst (per enhet)</div>
               <div class="price" id="afterProfit">—</div>
             </div>
             <div style="text-align:right">
               <div style="height:4px"></div>
-              <div style="font-size:12px;color:var(--muted)">Klicka Kopiera för offerttext</div>
+              <div class="muted" style="font-size:12px">Klicka Kopiera för offerttext</div>
             </div>
           </div>
 
           <div style="margin-top:12px" class="muted small" id="notes">Noteringar: —</div>
+          <div style="margin-top:8px" class="muted small" id="totalLine">Totalt: —</div>
         </div>
       </aside>
     </main>
@@ -282,6 +307,11 @@
   - DEFAULT_MARGIN: decimal (0.4 = 40%)
   - FINISH_RATE: SEK/h för efterarbete
   - QUALITY_MULTIPLIERS & FINISH_MINUTES: läggs här för tydlighet
+  - MODEL_PRICE: små fasta avgifter för CAD (läggs på EFTER marginalen)
+  - FAILURE_RATE: riskpåslag för misslyckanden
+  - EXPRESS_RATE: 0.3 = 30% (appliceras efter marginal)
+  - MIN_ORDER_PRICE: minsta pris per enhet
+  - QUANTITY_BREAKDOWN: vilka kvantiteter som visas i prisöversikten
   ===================================================================== */
 const FILAMENT_PRICES = { PLA: 200, PETG: 220, ABS: 180, TPU: 300, Custom: 200 };
 const EL_PRICE = 1.50; // SEK/kWh
@@ -292,6 +322,26 @@ const FINISH_RATE = 50; // SEK per hour (ändrat)
 // lättkonfigurerade multipliers/tider (ändra om du vill)
 const QUALITY_MULTIPLIERS = { draft: 0.7, standard: 1, strong: 1.5 };
 const FINISH_MINUTES = { none:0, light:10, sand:20, paint:60 };
+
+// Modellarbete (fixed small fees)
+const MODEL_PRICE = { ready: 0, edit: 20, create: 50 }; // SEK (added after profit margin)
+
+// risk och express
+const FAILURE_RATE = 0.08; // 8% påslag för fel/risk
+const EXPRESS_RATE = 0.30; // 30% extra efter marginal
+const MIN_ORDER_PRICE = 30; // SEK (minimi pris per enhet)
+
+// vilka kvantiteter som används internt för visning — men vi visar nu endast totalen för valt antal
+const QUANTITY_BREAKDOWN = [1,3,5,10,25];
+
+// batch-rabatt (på totalen)
+function batchDiscountRate(q){
+  if(q >= 11) return 0.15;
+  if(q >= 6) return 0.10;
+  if(q >= 3) return 0.05;
+  return 0;
+}
+
 /* =================================================================== */
 
 function fmt(v){ return (Math.round(v*100)/100).toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' kr'; }
@@ -303,7 +353,9 @@ function renderConfig(){
   cfg.innerHTML = `<strong>Antaganden (konfigurerat i koden)</strong><br>
     Maskin: ${PRINTER_PROFILE.name} — ${PRINTER_PROFILE.power} W, drift ${PRINTER_PROFILE.drift} SEK/h.<br>
     Underhåll/avskrivning: ca ${fmt(maintPerHour)}/h (baserat på pris ${PRINTER_PROFILE.price} SEK & livslängd ${PRINTER_PROFILE.lifetime} h).<br>
-    Elpris (använt): ${EL_PRICE.toFixed(2)} SEK/kWh.`;
+    Elpris (använt): ${EL_PRICE.toFixed(2)} SEK/kWh.<br>
+    Modellavgift: ready/edit/create = ${MODEL_PRICE.ready}/${MODEL_PRICE.edit}/${MODEL_PRICE.create} SEK (läggs på EFTER vinstmarginal).<br>
+    Minsta orderpris per enhet: ${MIN_ORDER_PRICE} SEK.`;
   document.getElementById('machineInfo').innerText = PRINTER_PROFILE.name;
 }
 
@@ -367,7 +419,11 @@ async function copyText(text){
 
 // calculations
 function calculate(){
-  const weight = (weightSelect.value === 'custom') ? parseFloat(weightCustom.value)||0 : parseFloat(weightSelect.value);
+  // quantity
+  const quantity = Math.max(1, parseInt(document.getElementById('quantityInput').value) || 1);
+
+  // weight handling
+  let weight = (weightSelect.value === 'custom') ? parseFloat(weightCustom.value)||0 : parseFloat(weightSelect.value);
   const time = (timeSelect.value === 'custom') ? parseFloat(timeCustom.value)||0 : parseFloat(timeSelect.value);
   if(!weight || weight <= 0){ showToast('Ange en vikt större än 0 g'); return null; }
   if(!time || time <= 0){ showToast('Ange ett giltigt antal timmar'); return null; }
@@ -378,38 +434,70 @@ function calculate(){
   const finishMinutes = FINISH_MINUTES[finish] ?? 0;
   const materialKey = document.getElementById('materialSelect').value;
   const filamentPricePerKg = FILAMENT_PRICES[materialKey] ?? FILAMENT_PRICES.Custom;
+  const modelChoice = document.getElementById('modelSelect').value;
+  const expressChoice = document.getElementById('expressSelect').value;
 
-  const materialCost = (weight/1000) * filamentPricePerKg;
-  const effectiveTime = Math.max(0.01, time * qualityMultiplier);
+  // production costs
+  const materialCost = (weight/1000) * filamentPricePerKg; // SEK
+  let effectiveTime = Math.max(0.01, time * qualityMultiplier);
+
   const energyCost = (PRINTER_PROFILE.power/1000) * effectiveTime * EL_PRICE;
   const machineCost = PRINTER_PROFILE.drift * effectiveTime;
   const maintPerHour = PRINTER_PROFILE.price / PRINTER_PROFILE.lifetime;
   const maintTotal = maintPerHour * effectiveTime;
   const finishCost = (finishMinutes/60) * FINISH_RATE;
 
-  const sumNoProfit = materialCost + energyCost + machineCost + maintTotal + finishCost;
-  const afterProfit = sumNoProfit * (1 + DEFAULT_MARGIN);
-  const finalPrice = afterProfit; // ingen moms applicerad
+  // modellarbete (fixed fee added AFTER margin)
+  const modelCost = MODEL_PRICE[modelChoice] ?? 0; // SEK (läggs till EFTER vinst)
+
+  // sum pre-margin
+  let sumNoProfit = materialCost + energyCost + machineCost + maintTotal + finishCost;
+
+  // failure/risk applied to production (before margin)
+  const riskCost = sumNoProfit * FAILURE_RATE;
+  sumNoProfit = sumNoProfit * (1 + FAILURE_RATE);
+
+  // apply margin
+  let perUnit = sumNoProfit * (1 + DEFAULT_MARGIN);
+
+  // express surcharge (after margin)
+  if(expressChoice === 'express') perUnit = perUnit * (1 + EXPRESS_RATE);
+
+  // ensure minimum per-unit
+  perUnit = Math.max(perUnit, MIN_ORDER_PRICE);
+
+  // batch discount applies to totals only — per-unit price stays the same
+  const discount = batchDiscountRate(quantity);
+  const totalAfterDiscount = perUnit * quantity * (1 - discount);
 
   // update UI
   document.getElementById('materialCost').innerText = fmt(materialCost);
   document.getElementById('energyCost').innerText = fmt(energyCost);
   document.getElementById('machineCost').innerText = fmt(machineCost);
   document.getElementById('finishCost').innerText = fmt(finishCost);
+  document.getElementById('modelCost').innerText = fmt(modelCost);
+  document.getElementById('riskCost').innerText = fmt(riskCost);
   document.getElementById('sumNoProfit').innerText = fmt(sumNoProfit);
-  document.getElementById('afterProfit').innerText = fmt(afterProfit);
-  document.getElementById('finalPrice').innerText = fmt(finalPrice);
-  document.getElementById('materialChip').innerText = materialKey;
 
-  // screen reader hint
-  const sr = document.getElementById('srPrice');
-  sr.innerText = `Slutpris ${fmtNumber(finalPrice)} kronor efter vinst`;
+  document.getElementById('afterProfit').innerText = perUnit.toFixed(2).toString().replace('.',',') + ' kr';
+  document.getElementById('finalPrice').innerText = perUnit.toFixed(2).toString().replace('.',',') + ' kr';
+  document.getElementById('materialChip').innerText = materialKey;
 
   const notes = [];
   if(finish !== 'none') notes.push('Efterarbete ingår i priset');
+  if(modelChoice === 'edit') notes.push('CAD-ändring krävs');
+  if(modelChoice === 'create') notes.push('Ny modell krävs (CAD)');
+  if(expressChoice === 'express') notes.push('Express-tillägg tillämpat');
+  if(discount) notes.push(`Batch-rabatt ${Math.round(discount*100)}% för ${quantity} st`);
+  if(perUnit === MIN_ORDER_PRICE) notes.push(`Minsta orderpris (${MIN_ORDER_PRICE} kr) tillämpat`);
   document.getElementById('notes').innerText = notes.length ? notes.join(' · ') : 'Inga tilläggsnoteringar';
+  document.getElementById('totalLine').innerText = `Totalt (${quantity} st): ${totalAfterDiscount.toLocaleString('sv-SE')} kr`;
 
-  return { materialCost, energyCost, machineCost, maintTotal, finishCost, sumNoProfit, afterProfit, finalPrice };
+  // screen reader hint
+  const sr = document.getElementById('srPrice');
+  sr.innerText = `Slutpris per enhet ${perUnit.toFixed(2)} kronor efter vinst. Totalt ${totalAfterDiscount.toFixed(2)} kronor.`;
+
+  return { materialCost, energyCost, machineCost, maintTotal, finishCost, modelCost, riskCost, sumNoProfit, perUnit, totalAfterDiscount };
 }
 
 // buttons
@@ -420,12 +508,27 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   document.getElementById('timeSelect').value = '3'; timeCustom.classList.add('hidden'); timeCustom.value='';
   document.getElementById('qualitySelect').value = 'standard';
   document.getElementById('finishSelect').value = 'none';
+  document.getElementById('modelSelect').value = 'ready';
+  document.getElementById('quantityInput').value = '1';
+  document.getElementById('expressSelect').value = 'normal';
   calculate();
 });
 document.getElementById('copyBtn').addEventListener('click', async ()=>{
   const r = calculate();
   if(!r) return;
-  const text = `Pris: ${(Math.round(r.finalPrice*100)/100).toLocaleString('sv-SE')} SEK (efter vinst)\nDetaljer:\nMaterial: ${r.materialCost.toFixed(2)} SEK\nEnergi: ${r.energyCost.toFixed(2)} SEK\nMaskin drift: ${r.machineCost.toFixed(2)} SEK\nEfterarbete: ${r.finishCost.toFixed(2)} SEK\nSumma utan vinst: ${r.sumNoProfit.toFixed(2)} SEK\nEfter vinst: ${r.afterProfit.toFixed(2)} SEK`;
+  const qty = parseInt(document.getElementById('quantityInput').value) || 1;
+  const text = `Pris per enhet: ${r.perUnit.toFixed(2)} SEK (efter vinst)
+Antal: ${qty}
+Totalt: ${r.totalAfterDiscount.toFixed(2)} SEK
+Detaljer:
+Material: ${r.materialCost.toFixed(2)} SEK
+Energi: ${r.energyCost.toFixed(2)} SEK
+Maskin drift: ${r.machineCost.toFixed(2)} SEK
+Efterarbete: ${r.finishCost.toFixed(2)} SEK
+Modellarbete: ${r.modelCost.toFixed(2)} SEK
+Riskpåslag: ${r.riskCost.toFixed(2)} SEK
+Summa utan vinst: ${r.sumNoProfit.toFixed(2)} SEK
+Efter vinst (per enhet): ${r.perUnit.toFixed(2)} SEK`;
   const ok = await copyText(text);
   if(ok) showToast('Resultat kopierat till urklipp.');
   else showToast('Kunde inte kopiera automatiskt — markera och kopiera texten manuellt.');
