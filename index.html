@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>3D-print Kalkylator — förenklad</title>
+<title>3D-print Kalkylator — förenklad (konfig i koden)</title>
 <style>
   :root{--bg:#f6f7fb;--card:#ffffff;--accent:#0b5ed7;--muted:#666;}
   body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);margin:0;padding:24px;display:flex;align-items:flex-start;justify-content:center;min-height:100vh}
@@ -21,6 +21,7 @@
   .row:last-child{border-bottom:0}
   .muted{color:var(--muted);font-size:13px}
   .small{font-size:12px;color:var(--muted)}
+  .info{margin-top:12px;padding:12px;border-radius:8px;background:#fcfeff;border:1px solid #e6f0ff;font-size:13px}
   .hidden{display:none}
   @media(max-width:700px){.grid{grid-template-columns:1fr}}
 </style>
@@ -28,6 +29,10 @@
 <body>
   <main class="card" role="main">
     <h1>3D-print Pris-kalkylator — förenklad</h1>
+
+    <div id="configInfo" class="info" aria-live="polite">
+      <!-- Fylls av JavaScript med info om maskin/el/fail som är konfigurerat i koden -->
+    </div>
 
     <div class="grid">
       <div>
@@ -37,7 +42,7 @@
           <option value="PETG">PETG</option>
           <option value="ABS">ABS</option>
           <option value="TPU">TPU</option>
-          <option value="Custom">Eget (custom)</option>
+          <option value="Custom">Eget (ändra i koden)</option>
         </select>
       </div>
 
@@ -70,9 +75,9 @@
       <div>
         <label>Kvalitet (påverkar printtid)</label>
         <select id="qualitySelect">
-          <option value="draft">Draft — snabb, tunnare vägg</option>
-          <option value="standard" selected>Standard — bra balans</option>
-          <option value="strong">Strong — mer solid, längre tid</option>
+          <option value="draft">Draft — snabb</option>
+          <option value="standard" selected>Standard — balans</option>
+          <option value="strong">Strong — extra solid</option>
         </select>
       </div>
 
@@ -86,39 +91,8 @@
         </select>
       </div>
 
-      <div>
-        <label>Include fail-cost?</label>
-        <select id="failSelect">
-          <option value="0">Nej (jag står för fails)</option>
-          <option value="0.05">Liten (5%)</option>
-          <option value="0.10">Måttlig (10%)</option>
-          <option value="0.20">Stor (20%)</option>
-        </select>
-      </div>
-
-      <div>
-        <label>Energi / elpris (snabbval)</label>
-        <select id="elSelect">
-          <option value="low">Lågt (1.00 SEK/kWh)</option>
-          <option value="medium" selected>Standard (1.50 SEK/kWh)</option>
-          <option value="high">Högt (2.50 SEK/kWh)</option>
-          <option value="custom">Ange eget</option>
-        </select>
-        <input id="elCustom" class="hidden" type="number" min="0.01" step="0.01" placeholder="SEK per kWh">
-      </div>
-
-      <div>
-        <label>Maskinprofil (snabbval för effekt & driftkostnad)</label>
-        <select id="machineProfile">
-          <option value="kobra">Anycubic Kobra S1 Combo — standard</option>
-          <option value="small">Liten printer — låg effekt</option>
-          <option value="pro">Pro / större maskin — högre effekt</option>
-          <option value="custom">Custom</option>
-        </select>
-      </div>
-
       <div class="full">
-        <label class="muted">Tryck på "Beräkna pris". Vill du ändra prisnivåer (filament, el, maskin, efterarbete) öppna koden och leta efter kommentaren "ÄNDRA HÄR" i skriptet — där ändrar du snabbt siffrorna.</label>
+        <label class="muted">Observera: Fails, elpris och maskinparametrar är **inte** ändringsbara i UI. De ändrar du direkt i koden (se kommentaren "ÄNDRA HÄR").</label>
       </div>
     </div>
 
@@ -135,45 +109,52 @@
       <div class="row"><div class="muted">Efterarbete (per del)</div><div id="finishCost">—</div></div>
       <div class="row"><div class="muted">Misslyckandekost (waste)</div><div id="failCost">—</div></div>
       <div class="row"><strong>Summa (utan vinst)</strong><strong id="sumNoProfit">—</strong></div>
-      <div class="row"><div class="muted">Efter vinstmarginal (fritt i koden)</div><div id="afterProfit">—</div></div>
+      <div class="row"><div class="muted">Efter vinstmarginal</div><div id="afterProfit">—</div></div>
       <div class="row"><div class="muted">Slutpris (inkl. moms)</div><div id="finalPrice">—</div></div>
     </section>
   </main>
 
 <script>
-/*
-  ======= ÄNDRA HÄR för att justera priser/presets =======
+/* 
+  ======= ÄNDRA HÄR (endast i koden) =======
   - FILAMENT_PRICES: pris i SEK per kg för varje material.
-  - EL_VALUES: SEK/kWh för presets low/medium/high.
-  - MACHINE_PROFILES: anger [effect_W, driftCost_perHour_SEK, machinePrice_SEK, lifetime_hours]
-    - driftCost_perHour är dina löpande driftkostnader per timme (värde som tidigare machineHour).
-    - machinePrice och lifetime används för att räkna underhåll/avskrivning per timme.
-  - DEFAULT_MARGIN: vinstmarginal som appliceras (0.4 = 40%)
-  - VAT: moms (0.25 = 25%)
-  Ändra bara siffrorna nedan — låt resten av koden vara som den är.
+  - EL_PRICE: SEK/kWh (energikostnaden).
+  - PRINTER_PROFILE: objekt med name, power (W), drift (SEK/h), price (SEK), lifetime (h).
+  - FAIL_RATE: decimal (0.0 = du står för fails).
+  - DEFAULT_MARGIN: vinstmarginal som appliceras (0.4 = 40%).
+  - VAT: moms (0.25 = 25%).
+  - FINISH_RATE: SEK per timme för efterarbete (t.ex. 200).
+  Ändra dessa värden för att påverka alla beräkningar. Ingen annan UI-kod behöver ändras.
 */
 const FILAMENT_PRICES = { PLA: 200, PETG: 220, ABS: 180, TPU: 300, Custom: 200 };
-const EL_VALUES = { low:1.00, medium:1.50, high:2.50 };
-const MACHINE_PROFILES = {
-  kobra: { power:250, drift:2.46, price:7000, lifetime:10000 },
-  small: { power:150, drift:1.50, price:3000, lifetime:8000 },
-  pro:   { power:400, drift:5.00, price:15000, lifetime:15000 },
-  custom:{ power:250, drift:2.46, price:7000, lifetime:10000 }
-};
-const DEFAULT_MARGIN = 0.40; // 40% vinst som standard
-const VAT = 0.25; // 25% moms
+const EL_PRICE = 1.50; // SEK per kWh
+const PRINTER_PROFILE = { name: 'Anycubic Kobra S1 Combo', power: 250, drift: 2.46, price: 7000, lifetime: 10000 };
+const FAIL_RATE = 0.0; // 0 = du står för fails
+const DEFAULT_MARGIN = 0.40; // 40%
+const VAT = 0.25; // 25%
+const FINISH_RATE = 200; // SEK/h för finish
 /* ===================================================== */
 
 function fmt(v){ return (Math.round(v*100)/100).toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' kr'; }
 
-// UI toggles for custom inputs
+// visa konfig-info (icke redigerbar för användaren)
+function renderConfigInfo(){
+  const el = document.getElementById('configInfo');
+  const maintPerHour = PRINTER_PROFILE.price / PRINTER_PROFILE.lifetime;
+  el.innerHTML = `
+    <strong>Snabbinfo (konfigurerat i koden):</strong><br>
+    Maskin: ${PRINTER_PROFILE.name} — effekt ${PRINTER_PROFILE.power} W, driftkostnad ${PRINTER_PROFILE.drift} SEK/h.<br>
+    Underhåll/avskrivning: ca ${fmt(maintPerHour)}/h (baserat på pris ${PRINTER_PROFILE.price} SEK & livslängd ${PRINTER_PROFILE.lifetime} h).<br>
+    Elpris: ${EL_PRICE.toFixed(2)} SEK/kWh. Fail-rate: ${(FAIL_RATE*100).toFixed(0)}% (du står för fails om 0%).<br>
+    Vill du ändra siffror här — öppna filen och redigera blocket markerat "ÄNDRA HÄR".
+  `;
+}
+
+// UI toggles för custom inputs
 const weightSelect = document.getElementById('weightSelect');
 const weightCustom = document.getElementById('weightCustom');
 const timeSelect = document.getElementById('timeSelect');
 const timeCustom = document.getElementById('timeCustom');
-const elSelect = document.getElementById('elSelect');
-const elCustom = document.getElementById('elCustom');
-const materialSelect = document.getElementById('materialSelect');
 
 weightSelect.addEventListener('change', ()=> {
   weightCustom.classList.toggle('hidden', weightSelect.value !== 'custom');
@@ -181,60 +162,42 @@ weightSelect.addEventListener('change', ()=> {
 timeSelect.addEventListener('change', ()=> {
   timeCustom.classList.toggle('hidden', timeSelect.value !== 'custom');
 });
-elSelect.addEventListener('change', ()=> {
-  elCustom.classList.toggle('hidden', elSelect.value !== 'custom');
-});
-materialSelect.addEventListener('change', ()=>{
-  // if Custom material chosen we leave FILAMENT_PRICES.Custom as default and allow code edit
-  // no UI custom input for filament price (you edit in code)
-});
 
 function calculate(){
-  // -> Vikt
+  // Vikt
   const weight = (weightSelect.value === 'custom') ? parseFloat(weightCustom.value)||0 : parseFloat(weightSelect.value);
-  // -> Tid i timmar
+  // Tid
   const time = (timeSelect.value === 'custom') ? parseFloat(timeCustom.value)||0 : parseFloat(timeSelect.value);
 
-  // Kvalitetsmultiplikator (påverkar tid)
+  // Kvalitet multiplikator
   const quality = document.getElementById('qualitySelect').value;
   const qualityMultiplier = quality === 'draft' ? 0.7 : (quality === 'standard' ? 1 : 1.5);
 
-  // Finish -> minuter
+  // Finish minuter
   const finish = document.getElementById('finishSelect').value;
   const finishMinutesMap = { none:0, light:10, sand:20, paint:60 };
   const finishMinutes = finishMinutesMap[finish] || 0;
 
-  // Fail-rate
-  const failRate = parseFloat(document.getElementById('failSelect').value)||0;
-
-  // Materialpris från preset (i SEK/kg)
+  // Materialpris från preset
   const materialKey = document.getElementById('materialSelect').value;
   const filamentPricePerKg = FILAMENT_PRICES[materialKey] ?? FILAMENT_PRICES.Custom;
-
-  // Elpris
-  const elPreset = document.getElementById('elSelect').value;
-  const elPrice = elPreset === 'custom' ? (parseFloat(elCustom.value)||EL_VALUES.medium) : (EL_VALUES[elPreset] || EL_VALUES.medium);
-
-  // Maskinprofil
-  const profileKey = document.getElementById('machineProfile').value;
-  const profile = MACHINE_PROFILES[profileKey] || MACHINE_PROFILES.custom;
 
   // Beräkningar
   const materialCost = (weight/1000) * filamentPricePerKg;
   const effectiveTime = Math.max(0.01, time * qualityMultiplier); // timmar
-  const energyCost = (profile.power/1000) * effectiveTime * elPrice;
-  const machineCost = profile.drift * effectiveTime;
-  const maintPerHour = profile.price / profile.lifetime;
+  const energyCost = (PRINTER_PROFILE.power/1000) * effectiveTime * EL_PRICE;
+  const machineCost = PRINTER_PROFILE.drift * effectiveTime;
+  const maintPerHour = PRINTER_PROFILE.price / PRINTER_PROFILE.lifetime;
   const maintTotal = maintPerHour * effectiveTime;
-  const finishCost = (finishMinutes/60) * (200); // default finish-timpris hårdkodat 200 SEK/h; ändra i kommentaren om du vill
+  const finishCost = (finishMinutes/60) * FINISH_RATE;
   const baseForFail = materialCost + energyCost;
-  const failCost = failRate * baseForFail;
+  const failCost = FAIL_RATE * baseForFail;
 
   const sumNoProfit = materialCost + energyCost + machineCost + maintTotal + finishCost + failCost;
   const afterProfit = sumNoProfit * (1 + DEFAULT_MARGIN);
   const finalPrice = afterProfit * (1 + VAT);
 
-  // UI update
+  // Uppdatera UI
   document.getElementById('materialCost').innerText = fmt(materialCost);
   document.getElementById('energyCost').innerText = fmt(energyCost);
   document.getElementById('machineCost').innerText = fmt(machineCost);
@@ -255,9 +218,6 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   document.getElementById('timeSelect').value = '3'; timeCustom.classList.add('hidden'); timeCustom.value = '';
   document.getElementById('qualitySelect').value = 'standard';
   document.getElementById('finishSelect').value = 'none';
-  document.getElementById('failSelect').value = '0';
-  document.getElementById('elSelect').value = 'medium'; elCustom.classList.add('hidden'); elCustom.value = '';
-  document.getElementById('machineProfile').value = 'kobra';
   calculate();
 });
 document.getElementById('copyBtn').addEventListener('click', ()=>{
@@ -267,7 +227,8 @@ document.getElementById('copyBtn').addEventListener('click', ()=>{
   alert('Resultat kopierat till urklipp.');
 });
 
-// första run
+// init
+renderConfigInfo();
 calculate();
 </script>
 </body>
